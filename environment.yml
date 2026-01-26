@@ -1,0 +1,10 @@
+name: acoustic_bc
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - torchvision
+  - numpy=1.23.5
+  - pytorch
+  - pygame
+prefix: /opt/anaconda3/envs/acoustic_bc
