@@ -4,39 +4,24 @@ import math
 import random
 import pickle
 
-# ---------------- CONFIG ----------------
-W, H = 800, 600
+WIDTH, HEIGHT = 800, 600
 NUM_RAYS = 32
 MAX_RANGE = 200
-DT = 0.05                   # Recommend 0.1
-SAVE_DATA = True
-CLOCK_TICK = 10             # Recommend 30
-
-# --------------------------------------
-
-class Obstacle:
-    def __init__(self):
-        self.x = random.uniform(100, W-100)
-        self.y = random.uniform(100, H-100)
-        self.vx = random.uniform(-50, 50)
-        self.vy = random.uniform(-50, 50)
-        self.r = random.uniform(20, 40)
-
-    def update(self):
-        self.x += self.vx * DT
-        self.y += self.vy * DT
-
-        if self.x < self.r or self.x > W-self.r: self.vx *= -1
-        if self.y < self.r or self.y > H-self.r: self.vy *= -1
+DT = 0.1
+BG_COLOR = (37, 57, 69)
+OBSTACLE_COLOR = (122, 13, 13)
+AGENT_COLOR = (92, 12, 92)
+RAY_COLOR = (0,100,255)
 
 class Agent:
     def __init__(self):
-        self.x = W/2
-        self.y = H/2
-        self.theta = 0
-        self.v = 0
+        self.x = WIDTH // 2
+        self.y = HEIGHT // 2
+        self.theta = 0.0
+        self.v = 100.0
+        self.sonar = SonarSensor(self)
 
-    def step(self, steer, accel):
+    def update(self, steer, accel):
         self.theta += steer * DT
         self.v += accel * DT
         self.v = np.clip(self.v, -100, 200)
@@ -44,99 +29,152 @@ class Agent:
         self.x += self.v * math.cos(self.theta) * DT
         self.y += self.v * math.sin(self.theta) * DT
 
-        self.x = np.clip(self.x, 0, W)
-        self.y = np.clip(self.y, 0, H)
+        self.x = np.clip(self.x, 0, WIDTH)
+        self.y = np.clip(self.y, 0, HEIGHT)
 
-def raycast(agent, obstacles):
-    angles = np.linspace(-np.pi/2, np.pi/2, NUM_RAYS)
-    readings = []
 
-    for a in angles:
-        ray_theta = agent.theta + a
-        min_dist = MAX_RANGE
+class Obstacle:
+    def __init__(self):
+        self.x = np.random.randint(0, WIDTH)
+        self.y = np.random.randint(0, HEIGHT)
+        self.vx = np.random.uniform(-50, 50)
+        self.vy = np.random.uniform(-50, 50)
+        self.r = random.uniform(20, 40)
 
-        for d in np.linspace(0, MAX_RANGE, 100):
-            rx = agent.x + d * math.cos(ray_theta)
-            ry = agent.y + d * math.sin(ray_theta)
+    def update(self):
+        self.x += self.vx * DT
+        self.y += self.vy * DT
+        if self.x < self.r or self.x > WIDTH-self.r: self.vx *= -1
+        if self.y < self.r or self.y > HEIGHT-self.r: self.vy *= -1
 
-            for ob in obstacles:
-                if (rx-ob.x)**2 + (ry-ob.y)**2 < ob.r**2:
-                    min_dist = d
+class SonarSensor:
+    def __init__(self, agent, n_rays=16, max_dist=200):
+        self.agent = agent
+        self.n_rays = n_rays
+        self.max_dist = max_dist
+        self.last_rays = []
+
+    def sense(self, obstacles):
+        obs = np.zeros(self.n_rays)
+        self.last_rays = []
+
+        for i, angle in enumerate(np.linspace(0, 2*np.pi, self.n_rays, endpoint=False)):
+            d = self._raycast(angle, obstacles)
+            obs[i] = d
+            self.last_rays.append((angle, d))
+        return obs
+
+    def _raycast(self, angle, obstacles):
+        x, y = self.agent.x, self.agent.y
+        dx, dy = np.cos(angle), np.sin(angle)
+
+        for d in np.linspace(0, self.max_dist, 50):
+            px = x + dx * d
+            py = y + dy * d
+            for o in obstacles:
+                if np.hypot(px - o.x, py - o.y) < 15:
+                    return d / self.max_dist
+        return 1.0
+        
+
+class AcousticWorld:
+    def __init__(self, n_obstacles=5, render=False):
+        self.render_mode = render
+        self.n_obstacles = n_obstacles
+        self.reset()
+
+        if render:
+            pygame.init()
+            self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+
+    # ------------------------
+    # Reset environment
+    # ------------------------
+    def reset(self):
+        self.agent = Agent()
+        self.obstacles = [Obstacle() for _ in range(self.n_obstacles)]
+        self.t = 0
+        return self._get_obs()
+
+    # ------------------------
+    # Step environment
+    # action = [steer, accel]
+    # ------------------------
+    def step(self, action):
+        steer, accel = action
+
+        self.agent.update(steer, accel)
+
+        # update obstacles
+        for o in self.obstacles:
+            o.update()
+
+        # collision check
+        collision = self._check_collision()
+
+        obs = self._get_obs()
+        self.t += DT
+
+        if self.render_mode:
+            self.render()
+
+        return obs, collision
+
+    # ------------------------
+    def _check_collision(self):
+        for o in self.obstacles:
+            d = np.hypot(self.agent.x - o.x, self.agent.y - o.y)
+            if d < 20:
+                return True
+        return False
+
+    def _get_obs(self):
+        sonar_measurements = self.agent.sonar.sense(self.obstacles)
+
+        return np.concatenate([sonar_measurements, [self.agent.x/WIDTH, self.agent.y/HEIGHT, self.agent.theta, self.agent.v/200]])
+
+    def _raycast(self):
+        angles = np.linspace(-np.pi/2, np.pi/2, NUM_RAYS)
+        readings = []
+
+        for a in angles:
+            ray_theta = self.agent.theta + a
+            min_dist = MAX_RANGE
+
+            for d in np.linspace(0, MAX_RANGE, 100):
+                rx = self.agent.x + d * math.cos(ray_theta)
+                ry = self.agent.y + d * math.sin(ray_theta)
+
+                for ob in self.obstacles:
+                    if (rx-ob.x)**2 + (ry-ob.y)**2 < ob.r**2:
+                        min_dist = d
+                        break
+                if min_dist < MAX_RANGE:
                     break
-            if min_dist < MAX_RANGE:
-                break
 
-        readings.append(min_dist / MAX_RANGE)
-    return np.array(readings)
+            readings.append(min_dist / MAX_RANGE)
+        return np.array(readings)
 
-# --------------------------------------
+    # ------------------------
+    # Render
+    # ------------------------
+    def render(self):
+        self.screen.fill(BG_COLOR)
 
-pygame.init()
-screen = pygame.display.set_mode((W, H))
-clock = pygame.time.Clock()
+        # agent
+        pygame.draw.circle(self.screen, AGENT_COLOR, (int(self.agent.x), int(self.agent.y)), 8)
+        hx = self.agent.x + 20 * math.cos(self.agent.theta)
+        hy = self.agent.y + 20 * math.sin(self.agent.theta)
+        pygame.draw.line(self.screen, (255,0,0), (self.agent.x, self.agent.y), (hx, hy), 2)
 
-agent = Agent()
-obstacles = [Obstacle() for _ in range(5)]
+        # obstacles
+        for o in self.obstacles:
+            pygame.draw.circle(self.screen, OBSTACLE_COLOR, (int(o.x), int(o.y)), int(o.r))
 
-dataset = []
+            # sonar rays
+        for angle, d in self.agent.sonar.last_rays:
+            dx = np.cos(angle) * d * self.agent.sonar.max_dist
+            dy = np.sin(angle) * d * self.agent.sonar.max_dist
+            pygame.draw.line(self.screen, RAY_COLOR, (self.agent.x, self.agent.y), (self.agent.x + dx, self.agent.y + dy), 1)
 
-running = True
-while running:
-    clock.tick(CLOCK_TICK)
-    screen.fill((0,0,0))
-
-    # ----- Keyboard control -----
-    keys = pygame.key.get_pressed()
-    steer = 0
-    accel = 0
-    if keys[pygame.K_LEFT]: steer = -2
-    if keys[pygame.K_RIGHT]: steer = 2
-    if keys[pygame.K_UP]: accel = 50
-    if keys[pygame.K_DOWN]: accel = -50
-
-    # Quit
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # ----- Update -----
-    agent.step(steer, accel)
-    for ob in obstacles:
-        ob.update()
-
-    sonar = raycast(agent, obstacles)
-
-    # Save expert data
-    if SAVE_DATA:
-        obs = np.concatenate([sonar, [agent.x/W, agent.y/H, agent.theta, agent.v/200]])
-        act = np.array([steer, accel])
-        dataset.append((obs, act))
-        print(sonar)
-
-    # ----- Draw agent -----
-    pygame.draw.circle(screen, (0,255,0), (int(agent.x), int(agent.y)), 10)
-    hx = agent.x + 20 * math.cos(agent.theta)
-    hy = agent.y + 20 * math.sin(agent.theta)
-    pygame.draw.line(screen, (255,0,0), (agent.x, agent.y), (hx, hy), 2)
-
-    # ----- Draw obstacles -----
-    for ob in obstacles:
-        pygame.draw.circle(screen, (0,0,255), (int(ob.x), int(ob.y)), int(ob.r))
-
-    # ----- Draw sonar rays -----
-    angles = np.linspace(-np.pi/2, np.pi/2, NUM_RAYS)
-    for d, a in zip(sonar, angles):
-        dist = d * MAX_RANGE
-        rx = agent.x + dist * math.cos(agent.theta + a)
-        ry = agent.y + dist * math.sin(agent.theta + a)
-        pygame.draw.line(screen, (255,255,0), (agent.x, agent.y), (rx, ry), 1)
-
-    pygame.display.flip()
-
-pygame.quit()
-
-# Save dataset
-if SAVE_DATA:
-    with open("expert_demos.pkl", "wb") as f:
-        pickle.dump(dataset, f)
-    print(f"Saved {len(dataset)} samples")
+        pygame.display.flip()

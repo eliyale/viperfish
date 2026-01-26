@@ -1,0 +1,45 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs and debug
+*.log
+
+# Data and experiment outputs
+data/
+datasets/
+checkpoints/
+runs/
+logs/
+*.npz
+*.npy
+
+# Model files
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pygame cache (if any)
+*.pkl
+
+# OS files
+Thumbs.db
