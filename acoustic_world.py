@@ -5,20 +5,21 @@ import random
 import pickle
 
 WIDTH, HEIGHT = 800, 600
-NUM_RAYS = 32
+NUM_RAYS = 100
 MAX_RANGE = 200
 DT = 0.1
 BG_COLOR = (37, 57, 69)
 OBSTACLE_COLOR = (122, 13, 13)
 AGENT_COLOR = (92, 12, 92)
 RAY_COLOR = (0,100,255)
+AGENT_RADIUS = 8
 
 class Agent:
     def __init__(self):
         self.x = WIDTH // 2
         self.y = HEIGHT // 2
         self.theta = 0.0
-        self.v = 100.0
+        self.v = 0.0
         self.sonar = SonarSensor(self)
 
     def update(self, steer, accel):
@@ -58,11 +59,16 @@ class SonarSensor:
         obs = np.zeros(self.n_rays)
         self.last_rays = []
 
-        for i, angle in enumerate(np.linspace(0, 2*np.pi, self.n_rays, endpoint=False)):
+        base_theta = self.agent.theta
+        angles = np.linspace(-np.pi/2, np.pi/2, self.n_rays)
+
+        for i, a in enumerate(angles):
+            angle = base_theta + a
             d = self._raycast(angle, obstacles)
             obs[i] = d
             self.last_rays.append((angle, d))
         return obs
+
 
     def _raycast(self, angle, obstacles):
         x, y = self.agent.x, self.agent.y
@@ -72,13 +78,13 @@ class SonarSensor:
             px = x + dx * d
             py = y + dy * d
             for o in obstacles:
-                if np.hypot(px - o.x, py - o.y) < 15:
+                if np.hypot(px - o.x, py - o.y) < o.r:
                     return d / self.max_dist
         return 1.0
         
 
 class AcousticWorld:
-    def __init__(self, n_obstacles=5, render=False):
+    def __init__(self, n_obstacles=7, render=False):
         self.render_mode = render
         self.n_obstacles = n_obstacles
         self.reset()
@@ -124,7 +130,7 @@ class AcousticWorld:
     def _check_collision(self):
         for o in self.obstacles:
             d = np.hypot(self.agent.x - o.x, self.agent.y - o.y)
-            if d < 20:
+            if d < (AGENT_RADIUS + o.r):
                 return True
         return False
 
@@ -133,27 +139,6 @@ class AcousticWorld:
 
         return np.concatenate([sonar_measurements, [self.agent.x/WIDTH, self.agent.y/HEIGHT, self.agent.theta, self.agent.v/200]])
 
-    def _raycast(self):
-        angles = np.linspace(-np.pi/2, np.pi/2, NUM_RAYS)
-        readings = []
-
-        for a in angles:
-            ray_theta = self.agent.theta + a
-            min_dist = MAX_RANGE
-
-            for d in np.linspace(0, MAX_RANGE, 100):
-                rx = self.agent.x + d * math.cos(ray_theta)
-                ry = self.agent.y + d * math.sin(ray_theta)
-
-                for ob in self.obstacles:
-                    if (rx-ob.x)**2 + (ry-ob.y)**2 < ob.r**2:
-                        min_dist = d
-                        break
-                if min_dist < MAX_RANGE:
-                    break
-
-            readings.append(min_dist / MAX_RANGE)
-        return np.array(readings)
 
     # ------------------------
     # Render
@@ -162,7 +147,7 @@ class AcousticWorld:
         self.screen.fill(BG_COLOR)
 
         # agent
-        pygame.draw.circle(self.screen, AGENT_COLOR, (int(self.agent.x), int(self.agent.y)), 8)
+        pygame.draw.circle(self.screen, AGENT_COLOR, (int(self.agent.x), int(self.agent.y)), AGENT_RADIUS)
         hx = self.agent.x + 20 * math.cos(self.agent.theta)
         hy = self.agent.y + 20 * math.sin(self.agent.theta)
         pygame.draw.line(self.screen, (255,0,0), (self.agent.x, self.agent.y), (hx, hy), 2)
