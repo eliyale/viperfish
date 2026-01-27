@@ -4,16 +4,10 @@ import math
 import random
 import pickle
 
-WIDTH, HEIGHT = 800, 600
-NUM_OBSTACLES = 7
-NUM_RAYS = 100
-MAX_RANGE = 200
-DT = 0.1
-BG_COLOR = (37, 57, 69)
-OBSTACLE_COLOR = (122, 13, 13)
-AGENT_COLOR = (92, 12, 92)
-RAY_COLOR = (0,100,255)
-AGENT_RADIUS = 8
+from config.env_config import WIDTH, \
+    HEIGHT, DT, BG_COLOR, AGENT_COLOR, \
+    OBSTACLE_COLOR, RAY_COLOR, NUM_OBSTACLES, \
+    AGENT_RADIUS
 
 class Agent:
     def __init__(self):
