@@ -13,6 +13,8 @@ from policies.random_policy import RandomPolicy
 from config.env_config import INPUT_DIM
 import torch
 from policies.bc_policy import BCNet, BCPolicyWrapper
+from policies.act_policy import ACTPolicy, ACTPolicyWrapper
+
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -62,6 +64,11 @@ def main():
         weights_file = os.path.join(script_dir, "checkpoints", "bc_policy.pt")
         model.load_state_dict(torch.load(weights_file, map_location="cpu"))
         policy = BCPolicyWrapper(model)
+    elif args.policy == "act":
+        model = ACTPolicy(obs_dim=INPUT_DIM, action_dim=2, chunk_size=5)
+        policy = ACTPolicyWrapper(model)
+    else:
+        raise ValueError(f"Unknown policy: {args.policy}")
 
     results = evaluate_policy(env, policy, max_time=args.time)
     print("\n=== Evaluation Results ===")
