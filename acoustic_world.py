@@ -5,6 +5,7 @@ import random
 import pickle
 
 WIDTH, HEIGHT = 800, 600
+NUM_OBSTACLES = 7
 NUM_RAYS = 100
 MAX_RANGE = 200
 DT = 0.1
@@ -84,7 +85,7 @@ class SonarSensor:
         
 
 class AcousticWorld:
-    def __init__(self, n_obstacles=7, render=False):
+    def __init__(self, n_obstacles=NUM_OBSTACLES, render=False):
         self.render_mode = render
         self.n_obstacles = n_obstacles
         self.reset()
