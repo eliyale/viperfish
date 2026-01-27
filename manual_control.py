@@ -4,8 +4,7 @@ from acoustic_world import AcousticWorld
 import numpy as np
 import time
 import os
-
-CLOCK_RATE = 30
+from config.env_config import CLOCK_RATE
 
 def run_environment(demos=False, out_file="demos.npz"):
     env = AcousticWorld(render=True)

@@ -12,6 +12,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from config.env_config import INPUT_DIM, OUTPUT_DIM
+
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,7 +42,7 @@ class DemoDataset(Dataset):
 ############################################
 
 class BCNet(nn.Module):
-    def __init__(self, input_dim):
+    def __init__(self, input_dim=INPUT_DIM):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -53,6 +55,25 @@ class BCNet(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+    
+class BCPolicyWrapper:
+    """
+    Wraps a BCNet so it has a .act(obs)
+    """
+    def __init__(self, model):
+        self.model = model
+        self.model.eval()  # ensure eval mode
+
+    def act(self, obs):
+        """
+        obs: np.array shape (input_dim,)
+        returns: np.array shape (2,) -> [steer, accel]
+        """
+        obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # batch dim
+        with torch.no_grad():
+            action = self.model(obs_t).numpy()[0]  # (2,)
+        return action
+
 
 
 ############################################
@@ -66,8 +87,7 @@ def train_bc(demo_file="demos.npz", epochs=20, batch_size=128, lr=1e-3):
     dataset = DemoDataset(demo_file)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    input_dim = dataset.obs.shape[1]
-    model = BCNet(input_dim).to(device)
+    model = BCNet(INPUT_DIM).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
@@ -100,10 +120,7 @@ def train_bc(demo_file="demos.npz", epochs=20, batch_size=128, lr=1e-3):
 # Loading Policy (for evaluation)
 ############################################
 
-def load_policy(model_path="bc_policy.pt", input_dim=None):
-    if input_dim is None:
-        raise ValueError("You must specify input_dim")
-
+def load_policy(model_path="bc_policy.pt", input_dim=INPUT_DIM):
     model = BCNet(input_dim)
     model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
