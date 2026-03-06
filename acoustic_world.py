@@ -141,20 +141,30 @@ class AcousticWorld:
     def render(self):
         self.screen.fill(BG_COLOR)
 
-        # agent
-        pygame.draw.circle(self.screen, AGENT_COLOR, (int(self.agent.x), int(self.agent.y)), AGENT_RADIUS)
-        hx = self.agent.x + 20 * math.cos(self.agent.theta)
-        hy = self.agent.y + 20 * math.sin(self.agent.theta)
-        pygame.draw.line(self.screen, (255,0,0), (self.agent.x, self.agent.y), (hx, hy), 2)
+        # 1. Convert agent coordinates to integers for the circle and the line
+        agent_pos = (int(self.agent.x), int(self.agent.y))
 
-        # obstacles
+        # Agent body
+        pygame.draw.circle(self.screen, AGENT_COLOR, agent_pos, AGENT_RADIUS)
+        
+        # Heading line calculation
+        hx = int(self.agent.x + 20 * math.cos(self.agent.theta))
+        hy = int(self.agent.y + 20 * math.sin(self.agent.theta))
+        
+        # FIX: Ensure start_pos (agent_pos) and end_pos (hx, hy) are ints
+        pygame.draw.line(self.screen, (255,0,0), agent_pos, (hx, hy), 2)
+
+        # Obstacles
         for o in self.obstacles:
             pygame.draw.circle(self.screen, OBSTACLE_COLOR, (int(o.x), int(o.y)), int(o.r))
 
-            # sonar rays
+        # Sonar rays
         for angle, d in self.agent.sonar.last_rays:
-            dx = np.cos(angle) * d * self.agent.sonar.max_dist
-            dy = np.sin(angle) * d * self.agent.sonar.max_dist
-            pygame.draw.line(self.screen, RAY_COLOR, (self.agent.x, self.agent.y), (self.agent.x + dx, self.agent.y + dy), 1)
+            # FIX: Also cast these to int to prevent the same error here
+            dx = int(np.cos(angle) * d * self.agent.sonar.max_dist)
+            dy = int(np.sin(angle) * d * self.agent.sonar.max_dist)
+            end_x = int(self.agent.x + dx)
+            end_y = int(self.agent.y + dy)
+            pygame.draw.line(self.screen, RAY_COLOR, agent_pos, (end_x, end_y), 1)
 
         pygame.display.flip()
