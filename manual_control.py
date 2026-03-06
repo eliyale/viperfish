@@ -11,7 +11,6 @@ def run_environment(demos=False, out_file="demos.npz"):
     obs = env.reset()
 
     pygame.init()
-    clock = pygame.time.Clock()
     running = True
 
     # Buffers for demonstrations
@@ -21,26 +20,26 @@ def run_environment(demos=False, out_file="demos.npz"):
     print("Controls: Arrow keys to drive. ESC to quit.")
 
     while running:
-        clock.tick(CLOCK_RATE)
 
         steer, accel = 0, 0
-
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            steer = -2
-        if keys[pygame.K_RIGHT]:
-            steer = 2
-        if keys[pygame.K_UP]:
-            accel = 50
-        if keys[pygame.K_DOWN]:
-            accel = -50
-        if keys[pygame.K_ESCAPE]:
-            running = False
 
         # Quit window
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            steer = -10
+        if keys[pygame.K_RIGHT]:
+            steer = 10
+        if keys[pygame.K_UP]:
+            accel = 300
+        if keys[pygame.K_DOWN]:
+            accel = -300
+        if keys[pygame.K_ESCAPE]:
+            running = False
+
 
         action = np.array([steer, accel], dtype=np.float32)
 

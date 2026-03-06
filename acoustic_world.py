@@ -33,8 +33,8 @@ class Obstacle:
     def __init__(self):
         self.x = np.random.randint(0, WIDTH)
         self.y = np.random.randint(0, HEIGHT)
-        self.vx = np.random.uniform(-50, 50)
-        self.vy = np.random.uniform(-50, 50)
+        self.vx = np.random.uniform(-200, 200)
+        self.vy = np.random.uniform(-200, 200)
         self.r = random.uniform(20, 40)
 
     def update(self):
@@ -87,6 +87,7 @@ class AcousticWorld:
         if render:
             pygame.init()
             self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            self.clock = pygame.time.Clock()
 
     # ------------------------
     # Reset environment
@@ -168,3 +169,7 @@ class AcousticWorld:
             pygame.draw.line(self.screen, RAY_COLOR, agent_pos, (end_x, end_y), 1)
 
         pygame.display.flip()
+
+        # forces the loop to wait so it runs at 1/DT frames per second
+        # If DT is 0.02, this runs at 50 FPS.
+        self.clock.tick_busy_loop(1 / DT)
