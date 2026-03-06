@@ -6,7 +6,15 @@ Behavior Cloning for AcousticWorld
 Loads demonstrations, trains BC policy, saves model
 """
 
+
 import os
+import sys
+
+# Add project root (one level up from this file) to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+    
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,19 +30,52 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 ############################################
 
 class DemoDataset(Dataset):
+    """
+    Loads demo data and normalizes observations and actions.
+    Stores mean/std for later denormalization.
+    """
     def __init__(self, demo_file):
+        # Load raw demo data
         data = np.load(demo_file)
-        self.obs = data["observations"].astype(np.float32)
-        self.acts = data["actions"].astype(np.float32)
+        obs = data["observations"].astype(np.float32)
+        acts = data["actions"].astype(np.float32)
+
+        # -------------------------------
+        # Compute normalization stats
+        # -------------------------------
+        self.obs_mean = obs.mean(axis=0)
+        self.obs_std = obs.std(axis=0) + 1e-8  # prevent division by zero
+
+        self.acts_mean = acts.mean(axis=0)
+        self.acts_std = acts.std(axis=0) + 1e-8
+
+        # -------------------------------
+        # Normalize data
+        # -------------------------------
+        self.obs = (obs - self.obs_mean) / self.obs_std
+        self.acts = (acts - self.acts_mean) / self.acts_std
 
         print(f"Loaded demos: {self.obs.shape[0]} samples")
         print(f"Obs dim: {self.obs.shape[1]}, Act dim: {self.acts.shape[1]}")
+        print("Observations and actions normalized")
 
     def __len__(self):
         return len(self.obs)
 
     def __getitem__(self, idx):
         return self.obs[idx], self.acts[idx]
+
+    # -------------------------------
+    # Helper methods to denormalize
+    # -------------------------------
+    def denormalize_actions(self, actions):
+        """
+        actions: np.array or torch.Tensor
+        """
+        return actions * self.acts_std + self.acts_mean
+
+    def denormalize_obs(self, obs):
+        return obs * self.obs_std + self.obs_mean
 
 
 ############################################
@@ -58,20 +99,33 @@ class BCNet(nn.Module):
     
 class BCPolicyWrapper:
     """
-    Wraps a BCNet so it has a .act(obs)
+    Wraps BCNet with normalization + act()
     """
-    def __init__(self, model):
+    def __init__(self, model, dataset):
         self.model = model
-        self.model.eval()  # ensure eval mode
+        self.model.eval()
+
+        # Save normalization stats
+        self.obs_mean = dataset.obs_mean
+        self.obs_std  = dataset.obs_std
+        self.act_mean = dataset.acts_mean
+        self.act_std  = dataset.acts_std
 
     def act(self, obs):
         """
-        obs: np.array shape (input_dim,)
-        returns: np.array shape (2,) -> [steer, accel]
+        obs: np.array (obs_dim,)
+        returns: np.array (2,)
         """
-        obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # batch dim
+        # Normalize observation
+        obs_norm = (obs - self.obs_mean) / self.obs_std
+
+        obs_t = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
+
         with torch.no_grad():
-            action = self.model(obs_t).numpy()[0]  # (2,)
+            action_norm = self.model(obs_t).numpy()[0]
+
+        # Denormalize action
+        action = action_norm * self.act_std + self.act_mean
         return action
 
 
