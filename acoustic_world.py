@@ -122,12 +122,20 @@ class AcousticWorld:
 
         return obs, collision
 
-    # ------------------------
     def _check_collision(self):
+        # Existing Obstacle Collision
         for o in self.obstacles:
             d = np.hypot(self.agent.x - o.x, self.agent.y - o.y)
             if d < (AGENT_RADIUS + o.r):
                 return True
+        
+        # Wall Collision (Pygame Window Bounds)
+        if (self.agent.x - AGENT_RADIUS <= 0 or 
+            self.agent.x + AGENT_RADIUS >= WIDTH or 
+            self.agent.y - AGENT_RADIUS <= 0 or 
+            self.agent.y + AGENT_RADIUS >= HEIGHT):
+            return True
+            
         return False
 
     def _get_obs(self):
@@ -142,8 +150,11 @@ class AcousticWorld:
     def render(self):
         self.screen.fill(BG_COLOR)
 
-        # 1. Convert agent coordinates to integers for the circle and the line
+        # Convert agent coordinates to integers for the circle and the line
         agent_pos = (int(self.agent.x), int(self.agent.y))
+
+        # Draw walls (window borders)
+        pygame.draw.rect(self.screen, (100, 100, 100), (0, 0, WIDTH, HEIGHT), 5)
 
         # Agent body
         pygame.draw.circle(self.screen, AGENT_COLOR, agent_pos, AGENT_RADIUS)
@@ -151,8 +162,7 @@ class AcousticWorld:
         # Heading line calculation
         hx = int(self.agent.x + 20 * math.cos(self.agent.theta))
         hy = int(self.agent.y + 20 * math.sin(self.agent.theta))
-        
-        # FIX: Ensure start_pos (agent_pos) and end_pos (hx, hy) are ints
+
         pygame.draw.line(self.screen, (255,0,0), agent_pos, (hx, hy), 2)
 
         # Obstacles
@@ -161,7 +171,6 @@ class AcousticWorld:
 
         # Sonar rays
         for angle, d in self.agent.sonar.last_rays:
-            # FIX: Also cast these to int to prevent the same error here
             dx = int(np.cos(angle) * d * self.agent.sonar.max_dist)
             dy = int(np.sin(angle) * d * self.agent.sonar.max_dist)
             end_x = int(self.agent.x + dx)

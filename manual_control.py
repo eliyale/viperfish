@@ -5,6 +5,7 @@ import numpy as np
 import time
 import os
 from config.env_config import CLOCK_RATE
+import datetime  # Add this import at the top
 
 def run_environment(demos=False, out_file="demos.npz"):
     env = AcousticWorld(render=True)
@@ -68,11 +69,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--collect_demos", action="store_true",
                         help="Collect demonstrations and save to file")
-    parser.add_argument("--outfile", type=str, default="demos.npz",
-                        help="Output demo filename")
+    # Change the default to None so we can detect if a custom name was provided
+    parser.add_argument("--outfile", type=str, default=None,
+                        help="Output demo filename (auto-generated if omitted)")
     args = parser.parse_args()
 
-    run_environment(demos=args.collect_demos, out_file=args.outfile)
+    # Generate a unique filename if collecting demos
+    final_filename = args.outfile
+    if args.collect_demos and final_filename is None:
+        # Format: demo_20260306_132045.npz
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_filename = f"demo_{timestamp}.npz"
+    elif final_filename is None:
+        final_filename = "demos.npz"
+
+    run_environment(demos=args.collect_demos, out_file=final_filename)
 
 
 if __name__ == "__main__":

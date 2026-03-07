@@ -9,6 +9,8 @@ Loads demonstrations, trains BC policy, saves model
 
 import os
 import sys
+import glob
+import pickle
 
 # Add project root (one level up from this file) to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -29,35 +31,53 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 # Dataset
 ############################################
 
+import glob
+
 class DemoDataset(Dataset):
-    """
-    Loads demo data and normalizes observations and actions.
-    Stores mean/std for later denormalization.
-    """
-    def __init__(self, demo_file):
-        # Load raw demo data
-        data = np.load(demo_file)
-        obs = data["observations"].astype(np.float32)
-        acts = data["actions"].astype(np.float32)
+    def __init__(self, data_dir):
+        # 1. Find all .npz files in the directory
+        file_paths = glob.glob(os.path.join(data_dir, "*.npz"))
+        if not file_paths:
+            raise FileNotFoundError(f"No demonstration files found in {data_dir}")
+        
+        all_obs = []
+        all_acts = []
 
-        # -------------------------------
-        # Compute normalization stats
-        # -------------------------------
+        # 2. Iterate and load each file
+        for path in file_paths:
+            data = np.load(path)
+            all_obs.append(data["observations"])
+            all_acts.append(data["actions"])
+
+        # 3. Concatenate into large arrays
+        obs = np.concatenate(all_obs, axis=0).astype(np.float32)
+        acts = np.concatenate(all_acts, axis=0).astype(np.float32)
+
+        # 4. Compute global normalization stats
         self.obs_mean = obs.mean(axis=0)
-        self.obs_std = obs.std(axis=0) + 1e-8  # prevent division by zero
-
+        self.obs_std = obs.std(axis=0) + 1e-8
         self.acts_mean = acts.mean(axis=0)
         self.acts_std = acts.std(axis=0) + 1e-8
 
-        # -------------------------------
-        # Normalize data
-        # -------------------------------
+        # 5. Normalize
         self.obs = (obs - self.obs_mean) / self.obs_std
         self.acts = (acts - self.acts_mean) / self.acts_std
 
-        print(f"Loaded demos: {self.obs.shape[0]} samples")
+        print(f"Loaded {len(file_paths)} files | Total samples: {self.obs.shape[0]}")
         print(f"Obs dim: {self.obs.shape[1]}, Act dim: {self.acts.shape[1]}")
         print("Observations and actions normalized")
+
+        self.stats = {
+            "obs_mean": self.obs_mean,
+            "obs_std": self.obs_std,
+            "acts_mean": self.acts_mean,
+            "acts_std": self.acts_std
+        }
+
+    def save_stats(self, path):
+        with open(path, "wb") as f:
+            pickle.dump(self.stats, f)
+        print(f"Normalization stats saved to {path}")
 
     def __len__(self):
         return len(self.obs)
@@ -101,15 +121,16 @@ class BCPolicyWrapper:
     """
     Wraps BCNet with normalization + act()
     """
-    def __init__(self, model, dataset):
+    def __init__(self, model, stats):
         self.model = model
         self.model.eval()
 
         # Save normalization stats
-        self.obs_mean = dataset.obs_mean
-        self.obs_std  = dataset.obs_std
-        self.act_mean = dataset.acts_mean
-        self.act_std  = dataset.acts_std
+        # Load from the stats dictionary instead of dataset object
+        self.obs_mean = stats["obs_mean"]
+        self.obs_std  = stats["obs_std"]
+        self.act_mean = stats["acts_mean"]
+        self.act_std  = stats["acts_std"]
 
     def act(self, obs):
         """
@@ -134,12 +155,15 @@ class BCPolicyWrapper:
 # Training Loop
 ############################################
 
-def train_bc(demo_file="demos.npz", epochs=20, batch_size=128, lr=1e-3):
+def train_bc(data_dir="data", epochs=20, batch_size=128, lr=1e-3):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
-    dataset = DemoDataset(demo_file)
+    dataset = DemoDataset(data_dir)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    stats_path = os.path.join(script_dir, "..", "checkpoints", "bc_stats.pkl")
+    dataset.save_stats(stats_path)
 
     model = BCNet(INPUT_DIM).to(device)
 
@@ -186,10 +210,8 @@ def load_policy(model_path="bc_policy.pt", input_dim=INPUT_DIM):
 ############################################
 
 if __name__ == "__main__":
-    demo_file = os.path.join(script_dir, "..", "data", "demos.npz")
-
     train_bc(
-        demo_file=demo_file,
+        data_dir="data",
         epochs=30,
         batch_size=256,
         lr=1e-3
